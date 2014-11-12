@@ -1,0 +1,463 @@
+
+<!DOCTYPE html>
+
+<base href="http://jeromeetienne.github.io/threex.poolball/examples/demo.html" target="_blank">
+<script src='vendor/three.js/build/three-min.js'></script>
+<script src='vendor/require.js/require.js'></script>
+<script src='../threex.poolball.js'></script>
+<script src="http://localhost:10080/js/third-party/threejs/StereoEffect.js"></script>
+<body style='margin: 0px; background-color: #bbbbbb; overflow: hidden;'><script>
+require([ 'bower_components/threex.minecraft/package.require.js'
+	, 'bower_components/threex.montainsarena/package.require.js'
+	, 'bower_components/threex.daynight/package.require.js'
+	, 'bower_components/threex.windowresize/package.require.js'
+	, 'bower_components/webaudiox/build/webaudiox.js'
+	], function(){
+	var renderer	= new THREE.WebGLRenderer();
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	document.body.appendChild( renderer.domElement );
+
+	var onRenderFcts= []
+	var scene	= new THREE.Scene();
+	var camera	= new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 30000 );
+	camera.position.z = 3;
+	effect = new THREE.StereoEffect(renderer);
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		set 3 point lighting						//
+	//////////////////////////////////////////////////////////////////////////////////
+
+	;(function(){
+		// add a ambient light
+		var light	= new THREE.AmbientLight( 0x020202 )
+		scene.add( light )
+		// add a light in front
+		var light	= new THREE.DirectionalLight('white', 1)
+		light.position.set(0.5, 0.5, 2)
+		scene.add( light )
+		// add a light behind
+		var light	= new THREE.DirectionalLight('white', 0.75)
+		light.position.set(-0.5, -0.5, -2)
+		scene.add( light )
+	})()
+
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		handle window resize						//
+	//////////////////////////////////////////////////////////////////////////////////
+
+	THREEx.WindowResize(renderer, camera)
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		comment								//
+	//////////////////////////////////////////////////////////////////////////////////
+
+	var sunAngle = Math.PI+Math.PI/2;
+	onRenderFcts.push(function(delta, now){
+		var dayDuration	= 20
+		sunAngle	-= delta/dayDuration * Math.PI*2
+	})
+	// var sunAngle = Math.PI-Math.PI/16;
+	//////////////////////////////////////////////////////////////////////////////////
+	//		starfield							//
+	//////////////////////////////////////////////////////////////////////////////////
+
+	var starField	= new THREEx.DayNight.StarField()
+	scene.add(starField.object3d)
+	onRenderFcts.push(function(delta, now){
+		starField.update(sunAngle)
+	})
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		sunSphere							//
+	//////////////////////////////////////////////////////////////////////////////////
+
+	var sunSphere	= new THREEx.DayNight.SunSphere()
+	scene.add( sunSphere.object3d )
+	onRenderFcts.push(function(delta, now){
+		sunSphere.update(sunAngle)
+	})
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		directionalLight						//
+	//////////////////////////////////////////////////////////////////////////////////
+
+	var sunLight	= new THREEx.DayNight.SunLight()
+	scene.add( sunLight.object3d )
+	onRenderFcts.push(function(delta, now){
+		sunLight.update(sunAngle)
+	})
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		skydom								//
+	//////////////////////////////////////////////////////////////////////////////////
+
+	var skydom	= new THREEx.DayNight.Skydom()
+	scene.add( skydom.object3d )
+	onRenderFcts.push(function(delta, now){
+		skydom.update(sunAngle)
+	})
+
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		add the montains						//
+	//////////////////////////////////////////////////////////////////////////////////
+	THREEx.MontainsArena.defaultMaterial	= THREE.MeshPhongMaterial
+
+	var mesh	= new THREEx.MontainsArena()
+	mesh.scale.multiplyScalar(30)
+	scene.add(mesh)
+
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		ground								//
+	//////////////////////////////////////////////////////////////////////////////////
+
+;(function(){
+	var textureDiffuseUrl	= 'images/grasslight-small-diffuse.jpg';
+	var textureDiffuse	= THREE.ImageUtils.loadTexture(textureDiffuseUrl);
+	textureDiffuse.wrapS	= THREE.RepeatWrapping;
+	textureDiffuse.wrapT	= THREE.RepeatWrapping;
+	textureDiffuse.repeat.x	= 10
+	textureDiffuse.repeat.y	= 10
+	textureDiffuse.anisotropy = 16;
+
+	var textureNormalUrl	= 'images/grasslight-small-normal.jpg';
+	var textureNormal	= THREE.ImageUtils.loadTexture(textureNormalUrl);
+	textureNormal.wrapS	= THREE.RepeatWrapping;
+	textureNormal.wrapT	= THREE.RepeatWrapping;
+	textureNormal.repeat.x	= 10
+	textureNormal.repeat.y	= 10
+	textureNormal.anisotropy = 16;
+
+	var geometry	= new THREE.CircleGeometry(30, 32)
+	var material	= new THREE.MeshPhongMaterial({
+		map		: textureDiffuse,
+		normalMap	: textureNormal,
+		normalScale	: new THREE.Vector2(1,1).multiplyScalar(0.5),
+		emissive	: 0x008800,
+	})
+
+ 	var mesh	= new THREE.Mesh(geometry, material)
+ 	mesh.lookAt(new THREE.Vector3(0,1,0))
+ 	scene.add(mesh)
+})()
+	//////////////////////////////////////////////////////////////////////////////////
+	//		comment								//
+	//////////////////////////////////////////////////////////////////////////////////
+
+	THREEx.MinecraftChar.defaultMaterial	= THREE.MeshPhongMaterial
+
+	var player	= new THREEx.MinecraftPlayer()
+	player.character.root.rotation.y = Math.PI
+	player.character.root.position.x = 0
+	player.character.root.position.z = 10
+	scene.add(player.character.root)
+	onRenderFcts.push(function(delta, now){
+		player.update(delta, now)
+	})
+		
+	// prevent the player from going out of the map
+	onRenderFcts.push(function(delta, now){
+		var position	= player.character.root.position
+		var maxRadius	= 12
+		if( position.length() > maxRadius )	position.setLength(maxRadius)
+	})
+
+	// add shadow
+	;(function(){
+		var object3d	= player.character.root
+		var shadow	= THREEx.createPoolBallShadow();
+		shadow.position.x	= object3d.position.x
+		shadow.position.y	= 0.01
+		shadow.position.z	= object3d.position.z
+		shadow.scale.multiplyScalar(0.7)
+		scene.add(shadow)
+		onRenderFcts.push(function(){
+			shadow.position.x	= object3d.position.x
+			shadow.position.z	= object3d.position.z
+		})
+	})()
+	
+
+	// attach camera to player
+	player.character.root.add(camera)
+	camera.position.z	= -3
+	camera.position.y	= 1.2
+	camera.lookAt(new THREE.Vector3(0,0.5,3))
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		controls.input based on keyboard				//
+	//////////////////////////////////////////////////////////////////////////////////
+
+	document.body.addEventListener('keydown', function(event){
+		var input	= player.controls.input
+		if( event.keyCode === 'W'.charCodeAt(0) )	input.up	= true
+		if( event.keyCode === 'S'.charCodeAt(0) )	input.down	= true
+		if( event.keyCode === 'Q'.charCodeAt(0) )	input.strafeLeft= true
+		if( event.keyCode === 'E'.charCodeAt(0) )	input.strafeRight= true
+		if( event.keyCode === 'A'.charCodeAt(0) && !event.shiftKey )	input.left	= true
+		if( event.keyCode === 'D'.charCodeAt(0) && !event.shiftKey )	input.right	= true
+		if( event.keyCode === 'A'.charCodeAt(0) &&  event.shiftKey )	input.strafeLeft= true
+		if( event.keyCode === 'D'.charCodeAt(0) &&  event.shiftKey )	input.strafeRight= true
+
+		// to support arrows because tsate asked me :)
+		if( event.keyCode === 38 )			input.up	= true
+		if( event.keyCode === 40 )			input.down	= true
+		if( event.keyCode === 37 && !event.shiftKey )	input.left	= true
+		if( event.keyCode === 39 && !event.shiftKey )	input.right	= true
+		if( event.keyCode === 37 &&  event.shiftKey )	input.strafeLeft= true
+		if( event.keyCode === 39 &&  event.shiftKey )	input.strafeRight= true
+	})
+	document.body.addEventListener('keyup', function(event){
+		var input	= player.controls.input
+
+		// console.log(event.keyCode)
+
+		if( event.keyCode === 'W'.charCodeAt(0) )	input.up	= false
+		if( event.keyCode === 'S'.charCodeAt(0) )	input.down	= false
+		if( event.keyCode === 'Q'.charCodeAt(0) )	input.strafeLeft= false
+		if( event.keyCode === 'E'.charCodeAt(0) )	input.strafeRight= false
+		if( event.keyCode === 'A'.charCodeAt(0) ||  event.shiftKey )	input.left	= false
+		if( event.keyCode === 'D'.charCodeAt(0) ||  event.shiftKey )	input.right	= false
+		if( event.keyCode === 'A'.charCodeAt(0) ||  event.shiftKey )	input.strafeLeft= false
+		if( event.keyCode === 'D'.charCodeAt(0) ||  event.shiftKey )	input.strafeRight= false
+
+		// to support arrows because tsate asked me :)
+		if( event.keyCode === 38 )			input.up	= false
+		if( event.keyCode === 40 )			input.down	= false
+		if( event.keyCode === 37 ||  event.shiftKey )	input.left	= false
+		if( event.keyCode === 39 ||  event.shiftKey )	input.right	= false
+		if( event.keyCode === 37 || !event.shiftKey )	input.strafeLeft= false
+		if( event.keyCode === 39 || !event.shiftKey )	input.strafeRight= false
+	})
+
+
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		initialize gameSounds						//
+	//////////////////////////////////////////////////////////////////////////////////
+	var gameSounds	= new WebAudiox.GameSounds()
+	gameSounds.lineOut.volume	= 0.2
+	// gameSounds.lineOut.volume	= 0.0
+	gameSounds.listenerFollow(player.character.root)
+	onRenderFcts.push(function(delta){
+		gameSounds.update(delta)
+	})
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		pool ball							//
+	//////////////////////////////////////////////////////////////////////////////////
+
+;(function(){
+	var ballDescriptions	= [
+		{
+			ballDesc	: '3',
+			stripped	: true,			
+			textureW	: 512,
+		},
+		{
+			ballDesc	: '9',
+			stripped	: true,				
+			textureW	: 512,
+		},
+		{
+			ballDesc	: '8',
+			stripped	: true,				
+			textureW	: 512,
+		},
+		{
+			ballDesc	: '2',
+			stripped	: false,				
+			textureW	: 512,
+		},
+		{
+			ballDesc	: '3',
+			stripped	: true,			
+			textureW	: 512,
+		},
+		{
+			ballDesc	: '9',
+			stripped	: true,				
+			textureW	: 512,
+		},
+		{
+			ballDesc	: '8',
+			stripped	: true,				
+			textureW	: 512,
+		},
+		{
+			ballDesc	: '2',
+			stripped	: false,				
+			textureW	: 512,
+		},
+	]
+	var nBalls	= ballDescriptions.length
+	for(var i = 0; i < nBalls; i++){
+		;(function(){
+			var ballDesc	= ballDescriptions[i]
+			var object3d	= THREEx.createPoolBall(ballDesc)
+			scene.add( object3d );
+
+			object3d.position.x	= (((i+0.5)/nBalls)-0.5)*14
+			object3d.position.y	= object3d.geometry.radius
+			object3d.position.z	= 1
+
+			var velocity	= new THREE.Vector3(0,0,2)			
+			var velocity	= new THREE.Vector3(0,0,3)		
+			var mapRadius	= 16
+
+			onRenderFcts.push(function(delta, now){
+				// var speed	= 2*delta
+				// var speed	= 0.2*delta
+				// object3d.position.x	+= speed
+				// object3d.position.z	+= speed
+				var translation	= velocity.clone().multiplyScalar(delta)
+				object3d.position.add(translation)
+
+
+				if( object3d.position.length() > mapRadius ){
+					object3dInitPosition()
+				}
+			})
+
+			function object3dInitPosition(){
+				object3d.rotation.x	= Math.PI*2*Math.random()
+				object3d.rotation.y	= Math.PI*2*Math.random()
+				object3d.rotation.z	= Math.PI*2*Math.random()		
+
+				object3d.position.x	= (Math.random()-0.5)*mapRadius
+				object3d.position.y	= 0
+				object3d.position.z	= (Math.random()-0.5)*mapRadius
+				object3d.position.setLength(mapRadius)
+				object3d.position.y	= object3d.geometry.radius
+
+				velocity.x	= (Math.random()-0.5)
+				velocity.z	= (Math.random()-0.5)
+				velocity.setLength(2+Math.random())
+			}
+
+			// add shadow
+			;(function(){
+				var shadow	= THREEx.createPoolBallShadow();
+				shadow.position.x	= object3d.position.x
+				shadow.position.y	= 0.01
+				shadow.position.z	= object3d.position.z
+				scene.add(shadow)
+				onRenderFcts.push(function(){
+					shadow.position.x	= object3d.position.x
+					shadow.position.z	= object3d.position.z
+				})
+			})()
+
+// TODO this could be threex.poolballrotationcontrols.js
+			object3d.matrixAutoUpdate = false;
+			object3d.updateMatrix();
+
+			var prevPosition	= new THREE.Vector3()
+			prevPosition.copy(object3d.position)
+			onRenderFcts.push(function(delta, now){
+				// compute velocity
+				var position	= object3d.position
+				var velocity	= position.clone().sub(prevPosition)
+				prevPosition.copy(position)
+
+				// update matrix
+				object3d.updateMatrix();
+
+				// solution to get rolling marble from |3d| on freenode
+				var translation	= new THREE.Vector3(position.x,position.y,position.z)
+				var matrix	= new THREE.Matrix4().makeTranslation(translation.x, translation.y, translation.z);
+				// TODO make it radius independant
+				var radius	= object3d.geometry.radius * object3d.scale.x
+				matrix.multiply(  new THREE.Matrix4().makeRotationZ(-velocity.x/(Math.PI*2*radius)));
+				matrix.multiply(  new THREE.Matrix4().makeRotationX( velocity.z/(Math.PI*2*radius)));
+				matrix.multiply(
+					new THREE.Matrix4().makeTranslation(-translation.x, -translation.y, -translation.z)
+				);
+				matrix.multiply(object3d.matrix)
+				object3d.matrix.copy(matrix);
+
+				// put back the rotation
+				object3d.rotation.setFromRotationMatrix( object3d.matrix, object3d.rotation.order );
+
+				// update matrixWorld
+				object3d.updateMatrixWorld(true);
+			});
+
+			//////////////////////////////////////////////////////////////////////////////////
+			//		to play immediatly						//
+			//////////////////////////////////////////////////////////////////////////////////
+
+// TODO this could be threex.poolballsound.js
+// new THREEx.PoolBallGameSound(object3d, gameSounds)
+			
+			var url	= 'sounds/roll.mp3'
+			// TODO handle caching later
+			// var url	= 'sounds/kick.wav'
+			gameSounds.createSound().load(url, function(sound){
+				// TODO expose this.utterance when loaded
+				var utterance	= sound.play({
+					loop	: true,
+					volume	: 0.5,
+					follow	: object3d,
+				})
+
+				var prevPosition	= object3d.position.clone()
+				onRenderFcts.push(function(delta){ 
+					var velocity	= object3d.position.clone().sub(prevPosition)
+					var speed	= velocity.length()
+					// TODO add this.minPlaybackRate, this.maxPlaybackRate, this.playbackSpeedRatio
+					speed		= Math.min(speed, 0.05)
+
+					var playbackRate= utterance.sourceNode.playbackRate
+					playbackRate.value	= 0.1+speed * 60;
+
+					prevPosition.copy( object3d.position )
+				})
+			})
+		})()
+	}
+})()
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		Camera Controls							//
+	//////////////////////////////////////////////////////////////////////////////////
+	// var mouse	= {x : 0, y : 0}
+	// document.addEventListener('mousemove', function(event){
+	// 	mouse.x	= (event.clientX / window.innerWidth ) - 0.5
+	// 	mouse.y	= (event.clientY / window.innerHeight) - 0.5
+	// }, false)
+	// onRenderFcts.push(function(delta, now){
+	// 	camera.position.x += (mouse.x*5 - camera.position.x) * (delta*3)
+	// 	camera.position.y += (mouse.y*5 +2 - camera.position.y) * (delta*3)
+	// 	camera.lookAt( scene.position )
+	// })
+
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		render the scene						//
+	//////////////////////////////////////////////////////////////////////////////////
+	onRenderFcts.push(function(){
+		//renderer.render( scene, camera );
+		effect.render(scene, camera);
+	})
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		loop runner							//
+	//////////////////////////////////////////////////////////////////////////////////
+	var lastTimeMsec= null
+	requestAnimationFrame(function animate(nowMsec){
+		// keep looping
+		requestAnimationFrame( animate );
+		// measure time
+		lastTimeMsec	= lastTimeMsec || nowMsec-1000/60
+		var deltaMsec	= Math.min(200, nowMsec - lastTimeMsec)
+		lastTimeMsec	= nowMsec
+		// call each update function
+		onRenderFcts.forEach(function(onRenderFct){
+			onRenderFct(deltaMsec/1000, nowMsec/1000)
+		})
+	})
+})
+</script></body>
